@@ -17,17 +17,25 @@ class polly(star_provider):
 		self.audio_cache = {}
 		star_provider.__init__(self, synthesis_audio_extension = "mp3")
 	def get_voices(self):
-		self.polly = boto3.client('polly')
-		raw_voices = []
-		for l in self.language_codes:
-			raw_voices += self.polly.describe_voices(LanguageCode = l).get("Voices", [])
-		voices = {}
-		for v in raw_voices:
-			for engine in v["SupportedEngines"]:
-				if not engine in self.engines: continue
-				id = v["Id"] + " " + engine
-				voices[id] = {"language": v["LanguageCode"]}
-		return voices
+		try:
+			kwargs = {}
+			if self.config.get("aws_access_key_id"): kwargs["aws_access_key_id"] = self.config.get("aws_access_key_id")
+			if self.config.get("aws_secret_access_key"): kwargs["aws_secret_access_key"] = self.config.get("aws_secret_access_key")
+			if self.config.get("region_name"): kwargs["region_name"] = self.config.get("region_name")
+			self.polly = boto3.client('polly', **kwargs)
+			raw_voices = []
+			for l in self.language_codes:
+				raw_voices += self.polly.describe_voices(LanguageCode = l).get("Voices", [])
+			voices = {}
+			for v in raw_voices:
+				for engine in v["SupportedEngines"]:
+					if not engine in self.engines: continue
+					id = v["Id"] + " " + engine
+					voices[id] = {"language": v["LanguageCode"]}
+			return voices
+		except (BotoCoreError, ClientError) as e:
+			print(f"Failed to get voices from AWS Polly: {e}")
+			return {}
 	async def synthesize(self, voice, text, rate = None, pitch = None):
 		cache_id = f"{voice} {text} {rate} {pitch}"
 		if cache_id in self.audio_cache: return self.audio_cache[cache_id]
@@ -51,6 +59,12 @@ class polly(star_provider):
 		self.audio_cache[cache_id] = audio
 		return audio
 	def add_configuration_options(self, panel):
+		wx.StaticText(panel, -1, "AWS Access Key ID")
+		self.aws_access_key_id = wx.TextCtrl(panel, value = self.config.get("aws_access_key_id", ""))
+		wx.StaticText(panel, -1, "AWS Secret Access Key")
+		self.aws_secret_access_key = wx.TextCtrl(panel, value = self.config.get("aws_secret_access_key", ""), style=wx.TE_PASSWORD)
+		wx.StaticText(panel, -1, "AWS Region")
+		self.region_name = wx.TextCtrl(panel, value = self.config.get("region_name", ""))
 		self.engine_options = {}
 		for e in ["standard", "neural", "generative", "long-form"]:
 			self.engine_options[e] = wx.CheckBox(panel, label = f"Enable &{e} voices")
@@ -60,6 +74,9 @@ class polly(star_provider):
 		for e in ["standard", "neural", "generative", "long-form"]:
 			if f"engine_{e}" in self.config and self.config.as_bool(f"engine_{e}"): self.engines.append(e)
 	def write_configuration_options(self, panel, config):
+		config["aws_access_key_id"] = self.aws_access_key_id.Value
+		config["aws_secret_access_key"] = self.aws_secret_access_key.Value
+		config["region_name"] = self.region_name.Value
 		for e in ["standard", "neural", "generative", "long-form"]:
 			config[f"engine_{e}"] = self.engine_options[e].Value
 
