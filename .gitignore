@@ -7,3 +7,5 @@ user/output
 user/readme.html
 venv
 *.ini
+.freebuff/
+uv.lock
