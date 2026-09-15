@@ -1,6 +1,6 @@
 # This is the base provider class for STAR and implements as many common features as possible.
-
-PROVIDER_REVISION = 4
+# Provider revision 5 adds a stable provider_id (sent with each voices packet) so coagulators can identify, log, kick and blocklist individual provider connections.
+PROVIDER_REVISION = 5
 
 import argparse
 import asyncio
@@ -13,8 +13,16 @@ import sys
 import tempfile
 import time
 import traceback
+import uuid
 import websockets.asyncio.client
 import wx
+
+def set_accessible_name(control, name):
+	"""Gives a control an explicit screen reader name, needed for controls a preceding static text label cannot reach (such as spin controls). Uses the wxdarkmode library when available and silently does nothing without it."""
+	try:
+		import wxdarkmode
+		wxdarkmode.set_accessible_name(control, name)
+	except ImportError: pass
 
 class voice_edit_dialog(wx.Dialog):
 	"""This is a subdialog of the below star_provider_configurator dialog which handles editing properties for a single voice."""
@@ -67,6 +75,7 @@ class star_provider_configurator(wx.Dialog):
 		self.voices_list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_edit_voice)
 		wx.StaticText(self, -1, "Number of &concurrent requests")
 		self.concurrent_requests = wx.SpinCtrl(self, value = str(int(provider.config.get("concurrent_requests", multiprocessing.cpu_count() / 2))), min = 1, max = multiprocessing.cpu_count() * 4)
+		set_accessible_name(self.concurrent_requests, "Number of concurrent requests")
 		provider.add_configuration_options(self)
 		self.hosts_list.Focus(0)
 		self.hosts_list.SetFocus()
@@ -120,6 +129,11 @@ class star_provider:
 		self.synthesis_audio_extension = synthesis_audio_extension
 		if handle_argv: self.handle_argv()
 		self.config = configobj.ConfigObj(self.config_filename)
+		# A stable, random identifier persisted in the config file so a coagulator can tell this provider instance apart from others, even across restarts.
+		if not self.config.get("provider_id"):
+			self.config["provider_id"] = uuid.uuid4().hex
+			self.config.write()
+		self.provider_id = self.config["provider_id"]
 		if not hasattr(self, "hosts"): self.hosts = self.config.get("hosts", ["ws://localhost:7774"])
 		if type(self.hosts) == str: self.hosts = [self.hosts]
 		self.read_configuration_options()
@@ -199,7 +213,7 @@ class star_provider:
 				time.sleep(3)
 	async def send_voices(self, websocket):
 		"""Send a list of voice names to the server."""
-		packet = {"provider": PROVIDER_REVISION, "provider_name": self.basename, "voices": []}
+		packet = {"provider": PROVIDER_REVISION, "provider_name": self.basename, "provider_id": self.provider_id, "voices": []}
 		for v in self.voices:
 			if not self.voices[v]["enabled"]: continue
 			packet["voices"].append(self.voices[v]["label"])
@@ -254,7 +268,13 @@ class star_provider:
 	def write_configuration_options(self, panel, config):
 		"""Override this in subclasses to save any custom conffiguration options to the ini file when the user clicks the same button in the GUI configurator."""
 	def configuration_interface(self):
-		if not wx.GetApp(): app = wx.App()
+		if not wx.GetApp():
+			try:
+				import wxdarkmode
+				wxdarkmode.enable() # Follows the system light/dark mode setting and keeps screen reader roles intact.
+			except ImportError:
+				pass # Dark mode is optional; the configurator works fine without it.
+			app = wx.App()
 		c = star_provider_configurator(self)
 		if c.ShowModal() == wx.ID_OK: c.save()
 

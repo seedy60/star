@@ -3,21 +3,63 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="color-scheme" content="light dark">
 	<title>STAR Coagulator</title>
 	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 	<style>
+		/* Theme tokens. The light set is used by default and the dark set mirrors the
+		palette of the wxdarkmode library used by the STAR desktop clients, so the web
+		frontend and the desktop programs look consistent. All foreground/background
+		pairs were chosen to exceed WCAG 2.1 AA (4.5:1 for text, 3:1 for borders and
+		focus indicators) in both themes. */
+		:root {
+			color-scheme: light dark;
+			--bg: #f4f4f4;
+			--surface: #ffffff;
+			--surface-alt: #f9f9f9;
+			--text: #1f1f1f;
+			--text-secondary: #5a5a5a;
+			--border: #6a6a6a;
+			--border-subtle: #cccccc;
+			--accent: #0057b8;
+			--accent-hover: #004a9e;
+			--accent-text: #ffffff;
+			--focus: #0057b8;
+			--focus-ring: #ffffff;
+			--error: #b00020;
+			--kick: #8f1f1f;
+		}
+		@media (prefers-color-scheme: dark) {
+			:root {
+				--bg: #202020;
+				--surface: #2b2b2b;
+				--surface-alt: #272727;
+				--text: #f2f2f2;
+				--text-secondary: #b8b8b8;
+				--border: #8a8a8a;
+				--border-subtle: #555555;
+				--accent: #6cb2ff;
+				--accent-hover: #8ec5ff;
+				--accent-text: #06263f;
+				--focus: #6cb2ff;
+				--focus-ring: #202020;
+				--error: #ff8a8a;
+				--kick: #ff8a8a;
+			}
+		}
 		body {
 			font-family: Arial, sans-serif;
 			margin: 0;
 			padding: 0;
-			background-color: #f4f4f4;
+			background-color: var(--bg);
+			color: var(--text);
 		}
 
 		.container {
 			width: 80%;
 			max-width: 1000px;
 			margin: 40px auto;
-			background-color: #fff;
+			background-color: var(--surface);
 			padding: 20px;
 			border-radius: 8px;
 			box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
@@ -25,23 +67,24 @@
 
 		h1 {
 			text-align: center;
-			color: #333;
+			color: var(--text);
 			margin-bottom: 20px;
 		}
 
 		h2 {
-			color: #555;
+			color: var(--text-secondary);
 			margin-top: 30px;
 		}
 
 		p, a {
 			font-size: 16px;
-			color: #333;
+			color: var(--text);
 		}
 
 		a {
-			color: #007BFF;
-			text-decoration: none;
+			color: var(--accent);
+			/* Underlined so links are distinguishable without relying on color alone. */
+			text-decoration: underline;
 		}
 
 		a:hover {
@@ -64,28 +107,41 @@
 			font-size: 16px;
 			margin-bottom: 20px;
 			border-radius: 5px;
-			border: 1px solid #ccc;
+			border: 1px solid var(--border);
 			outline: none;
+			background-color: var(--surface);
+			color: var(--text);
 		}
 
 		select:focus, input[type="text"]:focus, button:focus {
-			border-color: #007BFF;
+			/* A 3:1-contrast focus indicator, never removed. */
+			border-color: var(--focus);
+			box-shadow: 0 0 0 2px var(--focus-ring), 0 0 0 4px var(--focus);
 		}
 
 		button {
-			background-color: #007BFF;
-			color: white;
+			background-color: var(--accent);
+			color: var(--accent-text);
 			cursor: pointer;
 			border: none;
 		}
 
 		button:hover {
-			background-color: #0056b3;
+			background-color: var(--accent-hover);
 		}
+
+		/* The kick and unblock actions are visually distinct from the accent color
+		without relying on color alone; their button text says exactly what they do. */
+		.danger {
+			background-color: transparent;
+			color: var(--kick);
+			border: 2px solid var(--kick);
+		}
+		.danger:hover { background-color: transparent; filter: brightness(1.25); }
 
 		#liveRegion {
 			margin-top: 20px;
-			color: red;
+			color: var(--error);
 			font-weight: bold;
 		}
 
@@ -99,7 +155,7 @@
 		details {
 			margin-top: 30px;
 			padding: 15px;
-			background-color: #f9f9f9;
+			background-color: var(--surface-alt);
 			border-radius: 8px;
 		}
 
@@ -112,22 +168,58 @@
 		#voiceSearch {
 			flex: 1;
 		}
+
+		.visually-hidden {
+			position: absolute;
+			width: 1px; height: 1px;
+			margin: -1px; padding: 0;
+			overflow: hidden;
+			clip: rect(0 0 0 0);
+			white-space: nowrap; border: 0;
+		}
+
+		table { border-collapse: collapse; width: 100%; margin-bottom: 15px; }
+		th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border-subtle); }
+		th { color: var(--text-secondary); }
+		caption { text-align: left; font-weight: bold; padding-bottom: 8px; }
+		.inlineForm { display: inline; margin: 0; }
 	</style>
 </head>
 <body>
 	<div class="container">
-		<h1>STAR Coagulator</h1>
+		<header>
+			<h1>STAR Coagulator</h1>
+		</header>
+		<main>
 		<p>Hello {{username}}, welcome to the frontend for this <a href="https://github.com/samtupy/star">STAR</a> coagulator which currently has {{voicecount}} voices online.</p>
+		<p>{{auth_controls}}</p>
 
 		<details>
 			<summary>API</summary>
 			<p>This web service contains 2 API endpoints. You can query /voices to retrieve a list of connected voices in json format, or else /synthesize?voice=v&text=t to synthesize some text and retrieve the resulting audio data. Other parameters such as r=rate and p=pitch are accepted by the /synthesize endpoint as well. If you wish for a more complete interface, the standard websocket protocol is recommended in that case.</p>
 		</details>
 
+		<details id="adminSection"{{admin_hidden}}>
+			<summary>Administration</summary>
+			<p>Connected voice providers, with the address each one is connecting from and the stable provider ID they identify themselves with. You can kick a provider (which disconnects it and clears any reconnect penalty it may have earned) or unblock an address that was automatically blocked for reconnect flooding.</p>
+			<button type="button" id="refreshAdmin">Refresh</button>
+			<table id="providerTable">
+				<caption>Connected providers</caption>
+				<thead>
+					<tr><th scope="col">Provider</th><th scope="col">Connection</th><th scope="col">From</th><th scope="col">Provider ID</th><th scope="col">Voices</th><th scope="col">Actions</th></tr>
+				</thead>
+				<tbody id="providerList"></tbody>
+			</table>
+			<div id="blockedList"></div>
+			<h2>Connection log</h2>
+			<div id="connectionLog"></div>
+		</details>
+
 		<h2>Synthesis from your browser</h2>
 		<form id="quickspeakForm">
 			<div class="search-container">
-				<input type="text" id="voiceSearch" placeholder="Search for a voice..." aria-label="Search for a voice">
+				<label for="voiceSearch" class="visually-hidden">Search for a voice</label>
+				<input type="text" id="voiceSearch" placeholder="Search for a voice...">
 			</div>
 
 			<label for="voiceSelect">Choose a voice:</label>
@@ -145,11 +237,14 @@
 
 		<button type="button" id="downloadButton" style="display:none;">Download Audio</button>
 
-		<div id="liveRegion" aria-live="polite"></div>
+		<div id="liveRegion" role="status" aria-live="polite"></div>
 		<audio id="audioPlayer" controls style="display: none;"></audio>
+		</main>
 	</div>
 
 	<script>
+		// Per-session CSRF token for the admin actions; the server embeds it only for signed-in admins and rejects state-changing requests without it.
+		window.CSRF = '{{csrf}}';
 		const audioCache = new Map();
 		let currentAudioUrl = '';
 		let availableVoices = [];
@@ -170,9 +265,9 @@
 				currentAudioUrl = audioCache.get(cacheKey);
 				audioPlayer.attr('src', currentAudioUrl);
 				audioPlayer.show();
-				audioPlayer[0].play();
-				$('#downloadButton').show();
-				return;
+				audioPlayer[0].play();							$('#downloadButton').show();
+							announce('Synthesis complete. Playing audio.');
+							return;
 			}
 			$.ajax({
 				url: `/synthesize?voice=${encodeURIComponent(selectedVoice)}&text=${encodeURIComponent(inputText)}`,
@@ -187,6 +282,7 @@
 						audioPlayer.show();
 						audioPlayer[0].play();
 						$('#downloadButton').show();
+						announce('Synthesis complete. Playing audio.');
 					} else {
 						$('#liveRegion').text('Synthesis failed.');
 					}
@@ -221,6 +317,83 @@
 			}
 			return true; // It's likely a desktop platform
 		}
+		function announce(message) {
+			// Route every status through the single polite live region.
+			$('#liveRegion').text(message);
+		}
+		function refreshAdmin() {
+			$.getJSON('/providers').done(renderAdmin).fail(function(xhr) {
+				// 401 means the session has expired or the visitor signed out; 404 means the endpoints are disabled or unavailable on this coagulator.
+				if (xhr.status === 401) { announce('Your session has ended. Please sign in again.'); window.location.href = '/login'; }
+				else if (xhr.status === 404) $('#adminSection').hide();
+			});
+		}
+		function renderAdmin(data) {
+			const providers = data.providers || [];
+			const tbody = $('#providerList').empty();
+			if (providers.length === 0) {
+				tbody.append('<tr><td colspan="6">No providers are currently connected.</td></tr>');
+			}
+			providers.forEach(function(p) {
+				const row = $('<tr>');
+				$('<th scope="row">').text(p.name + ' #' + p.id).appendTo(row);
+				$('<td>').text('connected').appendTo(row);
+				$('<td>').text(p.address + ':' + p.port).appendTo(row);
+				$('<td>').text(p.provider_id || 'unknown').appendTo(row);
+				$('<td>').text(String(p.voices.length)).appendTo(row);
+				const actions = $('<td>');
+				// Kick and unblock submit as forms carrying the session's CSRF token; state-changing requests without it are rejected by the server.
+				const form = $('<form method="get" action="/kick" class="inlineForm">');
+				form.append($('<input type="hidden" name="csrf">').val(window.CSRF));
+				form.append($('<input type="hidden" name="id">').val(String(p.id)));
+				$('<button type="submit" class="danger">').text('Kick ' + p.name + ' #' + p.id).appendTo(form);
+				form.appendTo(actions);
+				row.append(actions);
+				tbody.append(row);
+			});
+			const blocked = Object.keys(data.blocked || {});
+			const blockedContainer = $('#blockedList').empty();
+			if (blocked.length > 0) {
+				const table = $('<table>');
+				$('<caption>').text('Blocked addresses').appendTo(table);
+				table.append('<thead><tr><th scope="col">Address</th><th scope="col">Seconds remaining</th><th scope="col">Actions</th></tr></thead>');
+				const blockedBody = $('<tbody>');
+				blocked.forEach(function(address) {
+					const row = $('<tr>');
+					$('<th scope="row">').text(address).appendTo(row);
+					$('<td>').text(String(data.blocked[address])).appendTo(row);
+				const actions = $('<td>');
+				const form = $('<form method="get" action="/unblock" class="inlineForm">');
+				form.append($('<input type="hidden" name="csrf">').val(window.CSRF));
+				form.append($('<input type="hidden" name="address">').val(address));
+				$('<button type="submit" class="danger">').text('Unblock ' + address).appendTo(form);
+				form.appendTo(actions);
+				row.append(actions);
+					blockedBody.append(row);
+				});
+				table.append(blockedBody);
+				blockedContainer.append(table);
+			}
+			const log = (data.log || []).slice(-50).reverse();
+			const logContainer = $('#connectionLog').empty();
+			if (log.length === 0) logContainer.append('<p>No connection events recorded yet.</p>');
+			const logList = $('<ul>');
+			log.forEach(function(e) {
+				logList.append($('<li>').text(new Date(e.time * 1000).toLocaleTimeString() + ': ' + e.message));
+			});
+			logContainer.append(logList);
+		}
+		function adminAction(url, successMessage) {
+			$.getJSON(url).done(function(data) {
+				announce(successMessage);
+				refreshAdmin();
+			}).fail(function(xhr) {
+				if (xhr.status === 401) { announce('Your session has ended. Please sign in again.'); window.location.href = '/login'; return; }
+				let message = 'Action failed.';
+				try { message = JSON.parse(xhr.responseText).error || message; } catch (e) {}
+				announce(message);
+			});
+		}
 		document.addEventListener('DOMContentLoaded', function () {
 			// Load voices initially
 			$.ajax({
@@ -231,11 +404,11 @@
 						availableVoices = data.voices;
 						populateVoiceList();
 					} else {
-						$('#liveRegion').text('Failed to load voices.');
+						announce('Failed to load voices.');
 					}
 				},
 				error: function () {
-					$('#liveRegion').text('Error fetching voices.');
+					announce('Error fetching voices.');
 				}
 			});
 			$('#quickspeakForm').on('submit', function (event) {
@@ -258,13 +431,28 @@
 				if (selectedVoice) {
 					do_synthesis(`Hello there, my name is ${selectedVoice}.`);
 				} else {
-					$('#liveRegion').text('Please select a voice to preview.');
+					announce('Please select a voice to preview.');
 				}
 			});
 			$('#voiceSelect').on('dblclick keypress', function(event) {
 				if (event.type === 'dblclick' && isDesktopPlatform() || event.type === 'keypress' && event.key === 'Enter') {
 					$('#previewButton').click();
 				}
+			});
+			refreshAdmin();
+			$('#refreshAdmin').on('click', refreshAdmin);
+			$('#adminSection summary').on('click', function() {
+				// Fetch fresh data whenever the section is expanded.
+				if ($('#adminSection').prop('open')) refreshAdmin();
+			});
+			// Intercept the kick/unblock forms so results are announced through the live region instead of navigating.
+			$('#providerList').on('submit', '.inlineForm', function(event) {
+				event.preventDefault();
+				adminAction($(this).attr('action') + '?' + $(this).serialize(), 'Kicked provider.');
+			});
+			$('#blockedList').on('submit', '.inlineForm', function(event) {
+				event.preventDefault();
+				adminAction($(this).attr('action') + '?' + $(this).serialize(), 'Address unblocked.');
 			});
 			$('#downloadButton').on('click', function () {
 				if (currentAudioUrl) {

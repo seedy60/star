@@ -17,11 +17,14 @@ dependencies = [
     "smart-list",
     "sound-lib",
     "websockets>=16.1.1",
+    "accessible-wxpython-darkmode>=1.0.0",
     "wxpython>=4.2.5",
+    "argon2-cffi>=25.1.0",
 ]
 
 [tool.uv.sources]
 platform-utils = { git = "https://github.com/accessibleapps/platform_utils" }
 resource-finder = { git = "https://github.com/accessibleapps/resource_finder" }
 smart-list = { git = "https://github.com/samtupy/smart_list_macos_fixes" }
+accessible-wxpython-darkmode = { git = "https://github.com/alexoloopios/accessible-wxpython-darkmode" }
 sound-lib = { git = "https://github.com/samtupy/sound_lib_macos_fixes" }

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="color-scheme" content="light dark">
+	<meta name="robots" content="noindex">
+	<title>Sign in — STAR Coagulator</title>
+	<style>
+		/* Same theme tokens as the main frontend; pairs exceed WCAG 2.1 AA in both themes. */
+		:root {
+			color-scheme: light dark;
+			--bg: #f4f4f4;
+			--surface: #ffffff;
+			--surface-alt: #f9f9f9;
+			--text: #1f1f1f;
+			--text-secondary: #5a5a5a;
+			--border: #6a6a6a;
+			--border-subtle: #cccccc;
+			--accent: #0057b8;
+			--accent-hover: #004a9e;
+			--accent-text: #ffffff;
+			--focus: #0057b8;
+			--focus-ring: #ffffff;
+			--error: #b00020;
+		}
+		@media (prefers-color-scheme: dark) {
+			:root {
+				--bg: #202020;
+				--surface: #2b2b2b;
+				--surface-alt: #272727;
+				--text: #f2f2f2;
+				--text-secondary: #b8b8b8;
+				--border: #8a8a8a;
+				--border-subtle: #555555;
+				--accent: #6cb2ff;
+				--accent-hover: #8ec5ff;
+				--accent-text: #06263f;
+				--focus: #6cb2ff;
+				--focus-ring: #202020;
+				--error: #ff8a8a;
+			}
+		}
+		body {
+			font-family: Arial, sans-serif;
+			margin: 0;
+			padding: 0;
+			background-color: var(--bg);
+			color: var(--text);
+		}
+		.container {
+			width: 80%;
+			max-width: 480px;
+			margin: 60px auto;
+			background-color: var(--surface);
+			padding: 20px;
+			border-radius: 8px;
+			box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+		}
+		h1 { text-align: center; margin-bottom: 20px; }
+		p, a { font-size: 16px; color: var(--text); }
+		a { color: var(--accent); text-decoration: underline; }
+		label { display: block; margin-bottom: 8px; font-weight: bold; }
+		input[type="text"], input[type="password"], button {
+			padding: 10px;
+			font-size: 16px;
+			margin-bottom: 20px;
+			border-radius: 5px;
+			border: 1px solid var(--border);
+			outline: none;
+			background-color: var(--surface);
+			color: var(--text);
+			width: 100%;
+			box-sizing: border-box;
+		}
+		input[type="text"]:focus, input[type="password"]:focus, button:focus {
+			border-color: var(--focus);
+			box-shadow: 0 0 0 2px var(--focus-ring), 0 0 0 4px var(--focus);
+		}
+		button {
+			background-color: var(--accent);
+			color: var(--accent-text);
+			cursor: pointer;
+			border: none;
+		}
+		button:hover { background-color: var(--accent-hover); }
+		#liveRegion { color: var(--error); font-weight: bold; margin-bottom: 15px; }
+		.notice { color: var(--text-secondary); }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>
+			<h1>STAR Coagulator</h1>
+		</header>
+		<main>
+			<p id="liveRegion" role="alert">{{error}}</p>
+			<p class="notice">{{notice}}</p>
+			<form method="get" action="/login">
+				<input type="hidden" name="csrf" value="{{csrf}}">
+				<label for="username">Username</label>
+				<input type="text" id="username" name="username" autocomplete="username" required>
+				<label for="password">Password</label>
+				<input type="password" id="password" name="password" autocomplete="current-password" required>
+				<button type="submit">Sign in</button>
+			</form>
+			<p><a href="/">Back to the coagulator frontend</a></p>
+		</main>
+	</div>
+</body>
+</html>

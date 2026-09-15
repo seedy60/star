@@ -1,3 +1,4 @@
 argparse
 configobj
 websockets
+argon2-cffi
