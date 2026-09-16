@@ -5,3 +5,5 @@ This directory contains various voice providers which allow you to use any voice
 Each provider contains a small readme document with a description and any critical notes, they'll be updated over time with more detail.
 
 The provider.py file is a backend written in Python which makes adding most new providers a very simple task, and is the root of most providers in this repository. For more information about providers in general or to learn how to write one, see the project's main readme file.
+
+Every provider accepts a --name command line argument that overrides the public name it presents to coagulators (shown in STAR voice tabs and in the coagulator's provider list). For example, `python polly.py --name "Polly Remote"`. Unless a --config path is explicitly given, this also changes the default ini filename, so different instances can keep separate settings. Without the flag, the name defaults to the provider's class name and never depends on how the script was launched, so you won't see filesystem paths leaking into voice tabs.

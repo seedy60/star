@@ -116,8 +116,10 @@ class star_provider_configurator(wx.Dialog):
 
 class star_provider:
 	"""A base class that can be used to implement any STAR provider able to be written in Python3. It abstracts all communication with coagulators, as much of the async stuff as possible, filtering voice names and more."""
-	def __init__(self, provider_basename = os.path.splitext(sys.argv[0])[0], handle_argv = True, run_immedietly = True, voices = None, synthesis_process = None, synthesis_process_rate = None, synthesis_process_pitch = None, synthesis_default_rate = None, synthesis_default_pitch = None, synthesis_audio_extension = None):
-		"""The provider_basename argument should be set to a simple strings such as balcony or pyttsx. Set handle_argv to False if you don't wish for the default CLI interface. If you really wish to configure this object further than the constructor allows before running the provider, set run_immedietly to False. The default implementation makes it easy to implement executable based providers with  the synthesis_process arguments."""
+	def __init__(self, provider_basename = None, handle_argv = True, run_immedietly = True, voices = None, synthesis_process = None, synthesis_process_rate = None, synthesis_process_pitch = None, synthesis_default_rate = None, synthesis_default_pitch = None, synthesis_audio_extension = None):
+		"""The provider_basename argument should be set to a simple strings such as balcony or pyttsx. It defaults to the class name of the provider, never to a filesystem path, so provider names and config files stay stable no matter how the script is launched. Set handle_argv to False if you don't wish for the default CLI interface. If you really wish to configure this object further than the constructor allows before running the provider, set run_immedietly to False. The default implementation makes it easy to implement executable based providers with  the synthesis_process arguments."""
+		# Derive a clean default from the concrete class rather than sys.argv[0], which is a full or relative path and used to leak things like "/home/user/star/provider/polly" into voice tabs and provider lists.
+		if not provider_basename: provider_basename = type(self).__name__
 		self.config_filename = f"{provider_basename}.ini"
 		self.basename = provider_basename
 		if voices: self.initial_voices = voices
@@ -144,9 +146,13 @@ class star_provider:
 		p.add_argument("--config", nargs = "?", const = self.config_filename)
 		p.add_argument("--configure", action = "store_true")
 		p.add_argument("--hosts", nargs = "+")
+		p.add_argument("--name", help = "override the public provider name shown on coagulators and in STAR voice tabs (also changes the default ini filename unless --config is given)")
 		self.args_parsed = p.parse_args(sys.argv[1:])
 		if "hosts" in self.args_parsed: self.hosts = self.args_parsed.hosts
 		if "configure" in self.args_parsed: self.do_configuration_interface = True
+		if "name" in self.args_parsed:
+			self.basename = str(self.args_parsed.name).strip() or self.basename
+			self.config_filename = f"{self.basename}.ini"
 		if "config" in self.args_parsed: self.config_filename = self.args_parsed.config
 	def get_voices(self):
 		"""Usually  implemented by subclasses. May return a string for a single voiced provider, a list of voice names, or a dictionary with the key being full voice names and the value being a subdictionary with any extra metadata. The default implementation just returns self.initial_voices (set in the constructor) as a shortcut for very simple providers. May be an async coroutine if necessary."""

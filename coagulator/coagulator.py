@@ -63,8 +63,18 @@ def describe_client(client):
 	return f"client #{client['id']}"
 
 def provider_identity(msg):
-	"""Extracts the provider identity from a voices packet. A stable provider_id (a random string persisted by the provider in its config file) lets the operator tell apart and manage multiple connections even when they share a provider name or reconnect with new ports."""
-	return str(msg.get("provider_id") or ""), str(msg.get("provider_name") or "")
+	"""Extracts the provider identity from a voices packet. A stable provider_id (a random string persisted by the provider in its config file) lets the operator tell apart and manage multiple connections even when they share a provider name or reconnect with new ports. The provider_name is sanitized as defense in depth: unpatched providers may report a filesystem path (the old default derived from sys.argv[0]), which would leak operator usernames and directory structures into voice tabs and the admin UI."""
+	return str(msg.get("provider_id") or ""), sanitize_provider_name(str(msg.get("provider_name") or ""))
+
+def sanitize_provider_name(name):
+	"""Turns a reported provider name into a safe display name. Filesystem paths are reduced to their final component, script extensions are stripped, control characters and excessive length are removed."""
+	raw = "".join(ch for ch in name if ch.isprintable()).strip()
+	parts = [p for p in re.split("[/\\\\]", raw) if p]  # treat both / and backslash as separators regardless of host OS
+	clean = parts[-1] if parts else raw
+	clean = re.sub("\\.(py|pyc|pyw|exe|bat|cmd)$", "", clean, flags = re.IGNORECASE)
+	clean = re.sub("\\s+", " ", clean).strip()
+	if len(clean) > 60: clean = clean[:60].rstrip()
+	return clean if clean else "unknown"
 
 def is_blocked(address):
 	"""Returns the remaining seconds of a temporary block for the given remote address, or 0 if the address is not blocked."""
@@ -214,8 +224,11 @@ def voice_packet(voice):
 def register_provider(client, msg):
 	"""Records and logs a provider's identity from its voices packet. An unknown identity change on an existing connection is logged loudly, as impersonating another provider's identity is a strong signal of abuse."""
 	provider_id, provider_name = provider_identity(msg)
+	raw_name = str(msg.get("provider_name") or "")
 	known = {"provider_id": provider_id, "provider_name": provider_name}
 	if any(client.get(k, None) != v for k, v in known.items()):
+		if raw_name and provider_name != raw_name:
+			log(f"{describe_client(client)} reported a filesystem-like provider name; sanitized to {provider_name!r} (raw value: {raw_name!r})", logging.WARNING)
 		if client.get("provider_name") not in [None, ""] and client.get("provider_name") != provider_name:
 			log(f"{describe_client(client)} changed reported identity to provider {provider_name} (id {provider_id or 'unknown'})", logging.WARNING)
 		client.update(known)

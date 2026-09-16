@@ -77,6 +77,8 @@ Providers that disconnect and reconnect rapidly are blocked automatically: by de
 
 This system identifies provider *installations*, not humans: anyone who obtains your coagulator's URI (including its password) can connect and will appear with whatever name their provider reports. For true accountability, keep your coagulator's credentials only among people you trust, and give each person their own user account, since users show up in logs too.
 
+As defense in depth, reported provider names are sanitized: filesystem paths are reduced to their final component (an unpatched provider that would have announced itself as /home/you/star/provider/polly/polly.py simply shows as polly), script extensions are stripped and control characters are removed. Whenever sanitization changes a name, the raw value is recorded in the connection log as a warning so you can still investigate, and the operator never sees raw paths in voice tabs or the admin list. A provider operator can always choose their own display name deliberately with the provider's --name flag.
+
 ## Sharing your coagulator's URI and other tips
 Both the user client and STAR providers connect to your coagulator using standardized URI syntax with the WebSocket (ws) scheme. That is, a valid URI might look like ws://username:password@address:port.
 
