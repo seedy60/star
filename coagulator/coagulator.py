@@ -35,8 +35,8 @@ logging.basicConfig(format = "%(asctime)s %(levelname)s: %(message)s")
 logging.getLogger("coagulator").setLevel(logging.INFO)
 
 def g(): pass #globals
-g.provider_rev = 5
-g.user_rev = 5
+g.provider_rev = 4
+g.user_rev = 4
 # How many full provider reconnects (to any host) within reconnect_flood_seconds (from coagulator.ini) trigger a temporary block, and how many seconds that block lasts.
 g.reconnect_flood_default = 8
 g.reconnect_flood_window_default = 60
