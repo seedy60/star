@@ -1,5 +1,5 @@
 # This is the base provider class for STAR and implements as many common features as possible.
-# Provider revision 5 adds a stable provider_id (sent with each voices packet) so coagulators can identify, log, kick and blocklist individual provider connections.
+# Provider revision 5 sends each voice as a dictionary carrying the voice's name plus, when the provider knows it, the speech engine the voice belongs to (for example SAPI4/SAPI5/OneCore), letting clients group voices by engine.
 PROVIDER_REVISION = 5
 
 import argparse
@@ -218,11 +218,13 @@ class star_provider:
 				last_exception = exc
 				time.sleep(3)
 	async def send_voices(self, websocket):
-		"""Send a list of voice names to the server."""
+		"""Send the list of voices to the server. Each voice is a dictionary with the voice's name plus its engine when the provider reports one (for example SAPI4/SAPI5/OneCore), letting clients group voices by engine."""
 		packet = {"provider": PROVIDER_REVISION, "provider_name": self.basename, "provider_id": self.provider_id, "voices": []}
 		for v in self.voices:
 			if not self.voices[v]["enabled"]: continue
-			packet["voices"].append(self.voices[v]["label"])
+			voice = {"name": self.voices[v]["label"]}
+			if self.voices[v].get("engine"): voice["engine"] = self.voices[v]["engine"]
+			packet["voices"].append(voice)
 		await websocket.send(json.dumps(packet))
 		return len(packet["voices"])
 	async def process_remote_event(self, websocket, event):

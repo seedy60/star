@@ -318,7 +318,7 @@ class star_client(wx.Frame):
 		self.Bind(wx.EVT_MENU, self.on_find_voice, id = self.voice_find_next_id)
 		self.Bind(wx.EVT_MENU, self.on_find_voice, id = self.voice_find_prev_id)
 		wx.StaticText(self.main_panel, -1, "&Voices")
-		# One tab per provider that has connected, holding a filtered voices list. The all tab shows every voice from every provider.
+		# One tab per provider (further split by speech engine when a provider such as balcony reports engines for its voices), holding a filtered voices list. The all tab shows every voice from every provider.
 		self.voices_notebook = wx.Notebook(self.main_panel)
 		self.voice_tabs = {}
 		self.voice_tab_order = []
@@ -390,11 +390,11 @@ class star_client(wx.Frame):
 			self.connection_thread = threading.Thread(target = self.connect, args = [config.get("host", "") if not self.local else "ws://127.0.0.1:7774"], daemon = True)
 			self.connection_thread.start()
 		else: self.connection_thread = None
-	def add_voice_tab(self, provider, label):
-		"""Creates a notebook page holding a filtered voices list for one provider (or all providers when provider is None), keeping accelerators, activation and focus behavior consistent across tabs."""
+	def add_voice_tab(self, provider, label, engine = ""):
+		"""Creates a notebook page holding a filtered voices list for one provider (or all providers when provider is None), optionally filtered further to one speech engine, keeping accelerators, activation and focus behavior consistent across tabs."""
 		page = wx.Panel(self.voices_notebook)
 		page_sizer = wx.BoxSizer(wx.VERTICAL)
-		voices_list = VirtualSmartList(parent = page, style = wx.LC_REPORT | wx.LC_SINGLE_SEL, get_virtual_item = lambda v, p = provider: self.voices_for_tab(p)[v], update_cache = lambda v_from, v_to, p = provider: self.voices_for_tab(p)[v_from:v_to + 1])
+		voices_list = VirtualSmartList(parent = page, style = wx.LC_REPORT | wx.LC_SINGLE_SEL, get_virtual_item = lambda v, p = provider, e = engine: self.voices_for_tab(p, e)[v], update_cache = lambda v_from, v_to, p = provider, e = engine: self.voices_for_tab(p, e)[v_from:v_to + 1])
 		voices_list.SetLabel(label.replace("&", ""))
 		voices_list.set_columns([Column(title = "voice name", model_field = "name", width = 300)])
 		voices_list.control.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_preview_voice)
@@ -404,31 +404,42 @@ class star_client(wx.Frame):
 		set_accessible_name(voices_list.control.control, label.replace("&", ""))
 		self.voices_notebook.AddPage(page, label)
 		key = provider if provider else "all"
+		if engine: key = (key, engine)
 		self.voice_tabs[key] = voices_list
 		self.voice_tab_order.append(key)
 		return voices_list
-	def voices_for_tab(self, provider):
-		"""Returns the filtered voices model for a provider tab (all voices when provider is None)."""
+	def voices_for_tab(self, provider, engine = None):
+		"""Returns the filtered voices model for a tab: all voices when provider is None, otherwise one provider's voices, optionally further filtered to a single speech engine."""
 		if provider is None: return self.voices
-		return [v for v in self.voices if v.get("provider") == provider]
+		if engine: return [v for v in self.voices if v.get("provider") == provider and v.get("engine", "") == engine]
+		return [v for v in self.voices if v.get("provider") == provider and not v.get("engine")]
 	def active_voices_list(self):
 		"""Returns the voices list control for the currently selected notebook tab."""
 		return self.voice_tabs[self.voice_tab_order[self.voices_notebook.GetSelection()]]
+	def current_voice_tab_key(self):
+		"""Returns the voice_tabs key (a provider, a (provider, engine) tuple, or "all") for the currently selected notebook tab."""
+		return self.voice_tab_order[self.voices_notebook.GetSelection()]
 	def rebuild_voice_tabs(self):
-		"""Refreshes every provider tab's voice count and makes sure a tab exists for each provider currently serving voices, removing tabs whose providers have disconnected."""
-		connected_providers = []
+		"""Refreshes every tab's voice count and makes sure a tab exists for each provider/engine currently serving voices, removing tabs whose providers have disconnected. Providers that report speech engines for their voices get one tab per engine; those that don't get a single provider tab."""
+		connected_keys = []
 		for v in self.voices:
 			p = v.get("provider") or ""
-			if p and p not in self.voice_tabs: self.add_voice_tab(p, p)
-			if p and p not in connected_providers: connected_providers.append(p)
+			if not p: continue
+			e = v.get("engine", "")
+			key = (p, e) if e else p
+			if key not in self.voice_tabs:
+				self.add_voice_tab(p, p if not e else f"{p} ({e})", engine = e)
+			if key not in connected_keys: connected_keys.append(key)
 		for key in list(self.voice_tab_order):
-			if key != "all" and key not in connected_providers:
+			if key != "all" and key not in connected_keys:
 				page_index = self.voice_tab_order.index(key)
 				self.voices_notebook.RemovePage(page_index)
 				self.voice_tab_order.pop(page_index)
 				del self.voice_tabs[key]
 		for key in self.voice_tab_order:
-			self.voice_tabs[key].update_count(len(self.voices_for_tab(None if key == "all" else key)))
+			provider = None if key == "all" else (key[0] if isinstance(key, tuple) else key)
+			engine = key[1] if isinstance(key, tuple) else None
+			self.voice_tabs[key].update_count(len(self.voices_for_tab(provider, engine)))
 			self.voice_tabs[key].refresh()
 	def create_labeled_control(self, label, control_class, *args, **kwargs):
 		"""Helper function that creates static label text for a control, then returns a two item tuple with the control argument as passed followed by the wx.StaticText object created for the label."""
@@ -451,12 +462,13 @@ class star_client(wx.Frame):
 		return True
 	def on_copy_voicename(self, evt):
 		"""Copies the currently focused voice name to the clipboard, called when ctrl+c is pressed on a voice name in the voices list."""
+		tab_voices = self.voices_for_tab(self.current_voice_tab_key())
 		voice = self.active_voices_list().get_selected_index()
-		if voice < 0 or voice >= len(self.voices):
+		if voice < 0 or voice >= len(tab_voices):
 			speech.speak("not focused on a voice")
 			return
 		if wx.TheClipboard.Open():
-			wx.TheClipboard.SetData(wx.TextDataObject(self.voices[voice]["name"]))
+			wx.TheClipboard.SetData(wx.TextDataObject(tab_voices[voice]["name"]))
 			wx.TheClipboard.Close()
 		speech.speak("copied")
 	def on_find_voice(self, evt):
@@ -472,7 +484,7 @@ class star_client(wx.Frame):
 			voices_list.control.control.SetFocus()
 			if r == wx.ID_CANCEL: return
 			self.voice_find_text = dlg.Value
-		tab_voices = self.voices_for_tab(self.voice_tab_order[self.voices_notebook.GetSelection()])
+		tab_voices = self.voices_for_tab(self.current_voice_tab_key())
 		initial_idx = voices_list.get_selected_index()
 		idx = initial_idx + dir
 		while True:
@@ -489,7 +501,7 @@ class star_client(wx.Frame):
 		voices_list = self.active_voices_list()
 		voice = voices_list.get_selected_index()
 		if voice < 0: return
-		tab_voices = self.voices_for_tab(self.voice_tab_order[self.voices_notebook.GetSelection()])
+		tab_voices = self.voices_for_tab(self.current_voice_tab_key())
 		if voice >= len(tab_voices): return
 		voice = tab_voices[voice]["name"]
 		self.audiospeak(f"{voice}: {config.get('voice_preview_text', 'Hello there, my name is {voice}.').format(voice = voice)}")
@@ -497,7 +509,7 @@ class star_client(wx.Frame):
 		"""Called when enter is pressed in the quickspeak text field, composes a simple speech request based on the current field value and speaks it."""
 		voices_list = self.active_voices_list()
 		voice = voices_list.get_selected_index()
-		if voice < 0 or voice >= len(self.voices_for_tab(self.voice_tab_order[self.voices_notebook.GetSelection()])):
+		if voice < 0 or voice >= len(self.voices_for_tab(self.current_voice_tab_key())):
 			speech.speak("not focused on a voice")
 			return
 		if not self.quickspeak.Value:
@@ -505,7 +517,7 @@ class star_client(wx.Frame):
 			return
 		self.script_continuous_preview = False
 		text_to_quickspeak = self.quickspeak.Value.replace('\n', '  ')
-		self.audiospeak(f"{self.voices_for_tab(self.voice_tab_order[self.voices_notebook.GetSelection()])[voice]['name']}: {text_to_quickspeak}")
+		self.audiospeak(f"{self.voices_for_tab(self.current_voice_tab_key())[voice]['name']}: {text_to_quickspeak}")
 	def on_preview_script(self, evt):
 		"""The script previewing facility, handles ctrl+alt+(space, up and down) calling self.audiospeak for each speech line detected."""
 		pos = self.script.GetInsertionPoint()
@@ -772,15 +784,17 @@ class star_client(wx.Frame):
 				playsound("audio/voices_disconnect.ogg")
 				speech.speak(f"{diff} {'voice' if diff == 1 else 'voices'} disconnected.")
 			voices_list = self.active_voices_list()
+			tab_key = self.current_voice_tab_key()
+			tab_voices = self.voices_for_tab(tab_key)
 			focused_voice = voices_list.get_selected_index()
-			if focused_voice > -1 and focused_voice < len(self.voices_for_tab(self.voice_tab_order[self.voices_notebook.GetSelection()])): focused_voice = self.voices_for_tab(self.voice_tab_order[self.voices_notebook.GetSelection()])[focused_voice]
+			if focused_voice > -1 and focused_voice < len(tab_voices): focused_voice = tab_voices[focused_voice]
 			else: focused_voice = 0
 			self.voices = message["voices"]
 			self.rebuild_voice_tabs()
 			if type(focused_voice) == dict:
-				new_tab = self.voice_tab_order[self.voices_notebook.GetSelection()]
-				try: focused_voice = self.voice_tabs[new_tab].find_index_of_item(focused_voice)
-				except ValueError: focused_voice = -1
+				new_tab = tab_key
+			try: focused_voice = self.voice_tabs[new_tab].find_index_of_item(focused_voice)
+			except (ValueError, KeyError): focused_voice = -1
 			if len(self.voices) > 0 and focused_voice > -1 and voices_list.get_selected_index() != focused_voice: voices_list.set_selected_index(focused_voice)
 		elif "error" in message:
 			playsound("audio/error.ogg")

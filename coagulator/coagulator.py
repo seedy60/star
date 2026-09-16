@@ -1,6 +1,6 @@
 # The original source code for this program is in ../old/coagulator.py. I wrote it using what turned out to be a noncompliant and incomplete web_socket_server framework, so I asked ChatGPT to rewrite it using the python websockets framework and then modified the result to make it work. In the end, Chat GPT is responsible for the asyncio stuff mostly, though even some of that has changed since.
 # Provider revision 5 adds provider identification (name plus stable provider_id), per-connection logging, reconnect flood blocking and admin endpoints (/providers, /kick, /unblock) so a coagulator operator can identify and remove malfunctioning or malicious provider connections.
-# User revision 5 expects voice lists in the form of dictionaries carrying their provider name, used by the client to present voices in per-provider tabs.
+# User revision 6 expects voice dictionaries to also carry each voice's speech engine (for example SAPI4/SAPI5/OneCore) when the provider knows it, letting clients group a provider's voices by engine.
 # Web authentication: websocket clients and providers keep HTTP basic auth, while the web frontend uses a session login with argon2id-hashed passwords, CSRF-protected admin actions and per-address login rate limiting.
 
 import asyncio
@@ -215,11 +215,17 @@ def find_provider_for_voice(voice):
 	return voice, None
 
 def voice_packet(voice):
-	"""Builds the per-voice packet sent to clients. User revision 5 and up receives a dictionary carrying the provider name (used by the client to group voices into per-provider tabs); older clients keep receiving the plain voice name string."""
-	provider_name = ""
+	"""Builds the per-voice packet sent to clients. Each voice is a dictionary carrying the voice's name, its provider (used by the client to group voices into per-provider tabs) and its speech engine when the serving provider reports one (letting the client split a provider's tab by engine, for example balcony SAPI4/SAPI5/OneCore)."""
+	provider_name, engine = "", ""
 	for c in g.voices[voice]:
-		if "provider_name" in g.clients.get(c, {}): return {"name": voice, "provider": g.clients[c]["provider_name"]}
-	return {"name": voice, "provider": provider_name}
+		client = g.clients.get(c, {})
+		if "provider_name" in client:
+			provider_name = client["provider_name"]
+			engine = g.voices_meta.get(voice, {}).get("engine", "")
+			break
+	result = {"name": voice, "provider": provider_name}
+	if engine: result["engine"] = engine
+	return result
 
 def register_provider(client, msg):
 	"""Records and logs a provider's identity from its voices packet. An unknown identity change on an existing connection is logged loudly, as impersonating another provider's identity is a strong signal of abuse."""
@@ -312,6 +318,9 @@ async def on_message(ws, client, message):
 		register_provider(client, msg)
 		gained_voice = False
 		for v in msg["voices"]:
+			if isinstance(v, dict): # Provider revision 6 voices carry their speech engine for client-side grouping.
+				if v.get("engine"): g.voices_meta[v["name"]] = {"engine": str(v["engine"]), "client": client["id"]}
+				v = v["name"]
 			if v in g.voices:
 				g.voices[v].append(client["id"])
 			else:
@@ -352,6 +361,7 @@ async def on_client_disconnect(ws, client_id):
 				while client_id in g.voices[v]: g.voices[v].remove(client_id)
 				if len(g.voices[v]) < 1:
 					del g.voices[v]
+					g.voices_meta.pop(v, None)
 					lost_voice = True
 		if lost_voice: await notify_all_clients({"voices": list(g.voices)}, [client_id])
 		for r in list(g.speech_requests):
@@ -744,6 +754,7 @@ async def main():
 	g.blocklist = {}
 	g.reconnect_times = {}
 	g.next_connection_number = 1
+	g.voices_meta = {}
 	handle_args()
 	g.reconnect_flood = int(g.config.get("reconnect_flood_threshold", g.reconnect_flood_default))
 	g.reconnect_flood_window = int(g.config.get("reconnect_flood_seconds", g.reconnect_flood_window_default))
